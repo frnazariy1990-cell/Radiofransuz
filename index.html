@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Radios Françaises</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--tg-theme-bg-color, #1a1a2e);
+      color: var(--tg-theme-text-color, #fff);
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 20px;
+      margin-bottom: 6px;
+      color: var(--tg-theme-text-color, #fff);
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color, #aaa);
+      margin-bottom: 20px;
+    }
+
+    .player-card {
+      background: var(--tg-theme-secondary-bg-color, #16213e);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border: 2px solid transparent;
+      transition: border-color 0.2s, transform 0.1s;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .player-card:active { transform: scale(0.98); }
+    .player-card.active { border-color: var(--tg-theme-button-color, #3390ec); }
+
+    .station-icon {
+      font-size: 32px;
+      width: 48px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .station-info { flex: 1; min-width: 0; }
+
+    .station-name {
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .station-desc {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color, #aaa);
+      margin-top: 2px;
+    }
+
+    .play-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--tg-theme-button-color, #3390ec);
+      border: none;
+      color: #fff;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .play-btn:active { transform: scale(0.9); }
+    .play-btn.loading { background: #888; }
+
+    .now-playing {
+      background: var(--tg-theme-button-color, #3390ec);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .now-playing.visible { display: flex; }
+
+    .equalizer {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 20px;
+    }
+
+    .bar {
+      width: 4px;
+      background: #fff;
+      border-radius: 2px;
+      animation: eq 0.8s ease-in-out infinite alternate;
+    }
+
+    .bar:nth-child(1) { animation-delay: 0s; }
+    .bar:nth-child(2) { animation-delay: 0.15s; }
+    .bar:nth-child(3) { animation-delay: 0.3s; }
+    .bar:nth-child(4) { animation-delay: 0.45s; }
+
+    @keyframes eq {
+      from { height: 4px; }
+      to   { height: 20px; }
+    }
+
+    .np-text { flex: 1; font-size: 14px; font-weight: 600; }
+
+    .stop-btn {
+      background: rgba(255,255,255,0.25);
+      border: none;
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    audio { display: none; }
+  </style>
+</head>
+<body>
+  <h1>📻 Radios Françaises</h1>
+  <p class="subtitle">Fransuzcha radio — jonli efir</p>
+
+  <div class="now-playing" id="nowPlaying">
+    <div class="equalizer">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+    <span class="np-text" id="npText">Efirda...</span>
+    <button class="stop-btn" onclick="stopRadio()">⏹ To'xtat</button>
+  </div>
+
+  <div id="stationList"></div>
+  <audio id="radioPlayer" preload="none"></audio>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    const STATIONS = [
+      { name: "RFI Monde",      desc: "Radio France Internationale",  icon: "🇫🇷", url: "https://icecast.radiofrance.fr/rfi-midfi.mp3" },
+      { name: "France Inter",   desc: "Asosiy milliy radio",           icon: "📻", url: "https://icecast.radiofrance.fr/franceinter-midfi.mp3" },
+      { name: "France Info",    desc: "Yangiliklar — 24/7",            icon: "📰", url: "https://icecast.radiofrance.fr/franceinfo-midfi.mp3" },
+      { name: "France Culture", desc: "Madaniyat va ta'lim",           icon: "📖", url: "https://icecast.radiofrance.fr/franceculture-midfi.mp3" },
+      { name: "France Musique", desc: "Klassik va jazz musiqa",        icon: "🎵", url: "https://icecast.radiofrance.fr/francemusique-midfi.mp3" },
+      { name: "RTL",            desc: "Eng mashhur fransuz radiosi",   icon: "🎤", url: "https://streaming.radio.rtl.fr/rtl-1-44-128" },
+      { name: "NRJ France",     desc: "Zamonaviy hits",                icon: "💃", url: "https://scdn.nrjaudio.fm/adwz1/fr/30001/mp3_128.mp3" },
+      { name: "Nostalgie",      desc: "Retro fransuz musiqasi",        icon: "🌟", url: "https://scdn.nrjaudio.fm/adwz2/fr/30601/mp3_128.mp3" },
+    ];
+
+    let currentIndex = -1;
+    const audio = document.getElementById("radioPlayer");
+    const nowPlaying = document.getElementById("nowPlaying");
+    const npText = document.getElementById("npText");
+    const list = document.getElementById("stationList");
+
+    function render() {
+      list.innerHTML = "";
+      STATIONS.forEach((s, i) => {
+        const card = document.createElement("div");
+        card.className = "player-card" + (i === currentIndex ? " active" : "");
+        card.innerHTML = `
+          <div class="station-icon">${s.icon}</div>
+          <div class="station-info">
+            <div class="station-name">${s.name}</div>
+            <div class="station-desc">${s.desc}</div>
+          </div>
+          <button class="play-btn ${i === currentIndex ? 'loading' : ''}" id="btn${i}">
+            ${i === currentIndex ? "⏸" : "▶"}
+          </button>`;
+        card.onclick = () => toggleStation(i);
+        list.appendChild(card);
+      });
+    }
+
+    function toggleStation(i) {
+      if (currentIndex === i) { stopRadio(); return; }
+      currentIndex = i;
+      const s = STATIONS[i];
+      audio.src = s.url;
+      audio.play();
+      npText.textContent = s.icon + " " + s.name;
+      nowPlaying.classList.add("visible");
+      render();
+      tg.HapticFeedback.impactOccurred("light");
+    }
+
+    function stopRadio() {
+      audio.pause();
+      audio.src = "";
+      currentIndex = -1;
+      nowPlaying.classList.remove("visible");
+      render();
+    }
+
+    audio.onerror = () => {
+      tg.showAlert("Ulanishda xatolik. Boshqa stansiyani sinab ko'ring.");
+      stopRadio();
+    };
+
+    render();
+  </script>
+</body>
+</html>
